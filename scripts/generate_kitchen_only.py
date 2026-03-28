@@ -14,6 +14,13 @@ END_DATE = date(2025, 12, 31)
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = Path(os.environ.get("KITCHEN_OUTPUT_DIR", ROOT)).expanduser().resolve()
+SALES_ORDERS_PATH = Path(os.environ.get("SALES_ORDERS_PATH", ROOT / "sales_orders.csv")).expanduser().resolve()
+SALES_ORDER_LINES_PATH = Path(
+    os.environ.get("SALES_ORDER_LINES_PATH", ROOT / "sales_order_lines.csv")
+).expanduser().resolve()
+SALES_DAILY_SUMMARY_PATH = Path(
+    os.environ.get("SALES_DAILY_SUMMARY_PATH", ROOT / "sales_daily_summary.csv")
+).expanduser().resolve()
 
 REQUIRED_FILES = {
     "branches": ROOT / "branches_master.csv",
@@ -24,9 +31,9 @@ REQUIRED_FILES = {
     "skus": ROOT / "sku_master.csv",
     "sku_recipe": ROOT / "sku_recipe_lines.csv",
     "employees": ROOT / "employees_master.csv",
-    "sales_orders": ROOT / "sales_orders.csv",
-    "sales_order_lines": ROOT / "sales_order_lines.csv",
-    "sales_daily_summary": ROOT / "sales_daily_summary.csv",
+    "sales_orders": SALES_ORDERS_PATH,
+    "sales_order_lines": SALES_ORDER_LINES_PATH,
+    "sales_daily_summary": SALES_DAILY_SUMMARY_PATH,
 }
 
 BATCH_RUNS_COLUMNS = [
