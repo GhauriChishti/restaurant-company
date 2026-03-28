@@ -1,0 +1,6 @@
+branch_id,branch_name,city,region,opening_date,branch_type,size_band,seating_capacity,kitchen_capacity_score,status
+B001,Karachi Clifton Flagship,Karachi,Sindh,2018-04-14,Flagship,XL,180,98,Active
+B002,Lahore Gulberg Central,Lahore,Punjab,2019-09-01,High Street,L,140,90,Active
+B003,Islamabad F-7 Express,Islamabad,ICT,2020-11-20,Express,M,110,85,Active
+B004,Rawalpindi Saddar Drive-Thru,Rawalpindi,Punjab,2021-07-05,Drive-Thru,M,95,80,Active
+B005,Faisalabad D-Ground,Faisalabad,Punjab,2022-03-18,High Street,S,72,72,Active

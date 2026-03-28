@@ -1,0 +1,11 @@
+processed_item_id,processed_item_name,source_batch_id,output_uom,yield_factor,standard_cost_per_unit,active_flag
+PI001,Marinated Beef,BA005,g,0.95,0.0805,1
+PI002,Injected Chicken,BA001,g,0.96,0.0511,1
+PI003,Garlic Dip Portion Base,BA006,g,0.98,0.1823,1
+PI004,Tangy Dip Portion Base,BA007,g,0.98,0.2024,1
+PI005,Honey Mustard Portion Base,BA008,g,0.98,0.3341,1
+PI006,Chipotle Dip Portion Base,BA009,g,0.98,0.2269,1
+PI007,Garlic Creamy Sauce Portion Base,BA010,g,0.98,0.2132,1
+PI008,Minty Whirl Portion Base,BA011,g,0.98,0.1822,1
+PI009,Burger Glow Portion Base,BA012,g,0.98,0.1946,1
+PI010,Mighty Mush Portion Base,BA013,g,0.98,0.2031,1
