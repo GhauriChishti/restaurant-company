@@ -1,6 +1,7 @@
 import csv
 import math
 import random
+import os
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -12,6 +13,7 @@ START_DATE = date(2025, 1, 1)
 END_DATE = date(2025, 12, 31)
 
 ROOT = Path(__file__).resolve().parents[1]
+OUTPUT_DIR = Path(os.environ.get("SALES_OUTPUT_DIR", ROOT)).expanduser().resolve()
 BRANCHES_MASTER_PATH = ROOT / "branches_master.csv"
 SKU_MASTER_PATH = ROOT / "sku_master.csv"
 
@@ -54,6 +56,7 @@ def weighted_pick(items, weights):
 
 
 def write_csv(path: Path, rows, columns):
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=columns)
         writer.writeheader()
@@ -303,7 +306,7 @@ def generate():
         "payment_method",
         "refund_flag",
     ]
-    write_csv(ROOT / "sales_orders.csv", orders, orders_columns)
+    write_csv(OUTPUT_DIR / "sales_orders.csv", orders, orders_columns)
 
     lines_columns = [
         "order_line_id",
@@ -315,7 +318,7 @@ def generate():
         "discount_line_amount",
         "net_line_sales",
     ]
-    write_csv(ROOT / "sales_order_lines.csv", lines, lines_columns)
+    write_csv(OUTPUT_DIR / "sales_order_lines.csv", lines, lines_columns)
 
     daily_summary = defaultdict(lambda: {"orders_count": 0, "units_sold": 0, "revenue": 0.0, "refunds_amount": 0.0})
 
@@ -355,7 +358,7 @@ def generate():
         "avg_order_value",
         "refunds_amount",
     ]
-    write_csv(ROOT / "sales_daily_summary.csv", daily_rows, daily_summary_columns)
+    write_csv(OUTPUT_DIR / "sales_daily_summary.csv", daily_rows, daily_summary_columns)
 
     # Validations
     assert orders, "sales_orders is empty"
@@ -413,9 +416,9 @@ def generate():
     assert ranked_cities and ranked_cities[0][0] == "Karachi", "Karachi must have highest annual revenue"
 
     print("Generated files:")
-    print("- sales_orders.csv")
-    print("- sales_order_lines.csv")
-    print("- sales_daily_summary.csv")
+    print(f"- {OUTPUT_DIR / 'sales_orders.csv'}")
+    print(f"- {OUTPUT_DIR / 'sales_order_lines.csv'}")
+    print(f"- {OUTPUT_DIR / 'sales_daily_summary.csv'}")
     print("Validations passed.")
 
 
