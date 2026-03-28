@@ -11,9 +11,11 @@ random.seed(SEED)
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = Path(os.environ.get("CUSTOMER_OUTPUT_DIR", ROOT)).expanduser().resolve()
-BRANCHES_MASTER_PATH = ROOT / "branches_master.csv"
-SALES_ORDERS_PATH = ROOT / "sales_orders.csv"
-SALES_ORDER_LINES_PATH = ROOT / "sales_order_lines.csv"
+BRANCHES_MASTER_PATH = Path(os.environ.get("BRANCHES_MASTER_PATH", ROOT / "branches_master.csv")).expanduser().resolve()
+SALES_ORDERS_PATH = Path(os.environ.get("SALES_ORDERS_PATH", ROOT / "sales_orders.csv")).expanduser().resolve()
+SALES_ORDER_LINES_PATH = Path(
+    os.environ.get("SALES_ORDER_LINES_PATH", ROOT / "sales_order_lines.csv")
+).expanduser().resolve()
 
 
 def round2(value):
