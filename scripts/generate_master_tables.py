@@ -128,6 +128,7 @@ def build_suppliers():
 
 def build_ingredients():
     data = [
+        ("Salt", "spice", "mineral", "g", "kg", 1000, 0.09, 0, 0, 365, "S004", 1),
         ("Chicken Whole", "protein", "meat", "g", "kg", 1000, 0.62, 0, 1, 3, "S001", 1),
         ("Beef Strips", "protein", "meat", "g", "kg", 1000, 0.78, 0, 1, 3, "S002", 1),
         ("Oil", "frying", "oil", "ml", "ltr", 1000, 0.035, 0, 0, 270, "S003", 1),
@@ -250,8 +251,8 @@ def build_batch_recipe_lines(ingredients_by_name, batches):
     }
 
     # Add a minimal synthetic seasoning ingredient if not listed in base BOM
-    if "Salt" not in ingredients_by_name:
-        pass
+    #if "Salt" not in ingredients_by_name:
+    #    pass
 
     batch_id_by_name = {b["batch_name"]: b["batch_id"] for b in batches}
     rows = []
@@ -259,7 +260,7 @@ def build_batch_recipe_lines(ingredients_by_name, batches):
     for batch_name, lines in recipes.items():
         for ingredient_name, qty, q_uom in lines:
             if ingredient_name not in ingredients_by_name:
-                continue
+                raise ValueError(f"Missing ingredient in master: {ingredient_name}")
             ing = ingredients_by_name[ingredient_name]
             unit_cost = float(ing["standard_unit_cost"])
             line_cost = money(qty * unit_cost)
