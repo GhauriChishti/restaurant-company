@@ -1,0 +1,24 @@
+sku_id,sku_name,category,popularity_band,margin_band,menu_engineering_quadrant,loss_leader_flag,action_hint
+SKU001,Broast Quarter,Chicken Meals,Very High,Medium,Star,False,Promote and maintain consistency
+SKU002,Broast Half,Chicken Meals,Very High,Medium,Star,False,Promote and maintain consistency
+SKU003,Broast Full,Chicken Meals,Medium,Medium,Puzzle,False,Increase visibility and bundle smartly
+SKU004,Smokey Laham,Burgers/Wraps,High,Medium,Star,False,Promote and maintain consistency
+SKU005,Burger Al-Mushroom,Burgers/Wraps,Very High,Low,Plowhorse,False,Review recipe/price to lift margin
+SKU006,Smash Beiruti,Burgers/Wraps,High,Negative,Plowhorse,True,Review recipe/price to lift margin
+SKU007,Chicken Batata,Burgers/Wraps,Very High,Medium,Star,False,Promote and maintain consistency
+SKU008,Wrap Al Beiruti,Burgers/Wraps,High,Medium,Star,False,Promote and maintain consistency
+SKU009,Chicken Shots Burger,Burgers/Wraps,High,Negative,Plowhorse,True,Review recipe/price to lift margin
+SKU010,Fries,Sides,Very High,High,Star,False,Promote and maintain consistency
+SKU011,Garlic Dip,Dips/Sauces,Medium,High,Puzzle,False,Increase visibility and bundle smartly
+SKU012,Tangy Dip,Dips/Sauces,Low,High,Puzzle,False,Increase visibility and bundle smartly
+SKU013,Honey Mustard Dip,Dips/Sauces,Medium,High,Puzzle,False,Increase visibility and bundle smartly
+SKU014,Mustard Sauce Dip,Dips/Sauces,Low,High,Puzzle,False,Increase visibility and bundle smartly
+SKU015,Chipotle Dip,Dips/Sauces,Low,High,Puzzle,False,Increase visibility and bundle smartly
+SKU016,Garlic Creamy Sauce,Dips/Sauces,Low,High,Puzzle,False,Increase visibility and bundle smartly
+SKU017,Minty Whirl,Dips/Sauces,Low,High,Puzzle,False,Increase visibility and bundle smartly
+SKU018,Burger Glow,Dips/Sauces,Low,High,Puzzle,False,Increase visibility and bundle smartly
+SKU019,Mighty Mush,Dips/Sauces,Medium,High,Puzzle,False,Increase visibility and bundle smartly
+SKU020,Mojito,Drinks,High,High,Star,False,Promote and maintain consistency
+SKU021,Ice Tea,Drinks,High,High,Star,False,Promote and maintain consistency
+SKU022,Blueberry,Drinks,Medium,High,Puzzle,False,Increase visibility and bundle smartly
+SKU023,Mint Margarita,Drinks,Medium,High,Puzzle,False,Increase visibility and bundle smartly
