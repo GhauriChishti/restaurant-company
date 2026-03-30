@@ -1,0 +1,294 @@
+{
+  "daily_kpis": {
+    "rows": 1825,
+    "cols": 23,
+    "columns": [
+      "date",
+      "branch_id",
+      "branch_name",
+      "city",
+      "total_orders",
+      "total_customers",
+      "dine_in_orders",
+      "takeaway_orders",
+      "gross_revenue",
+      "discount_amount",
+      "net_revenue",
+      "food_cost",
+      "packaging_cost",
+      "labor_cost",
+      "overhead_cost",
+      "marketing_cost",
+      "total_cost",
+      "gross_profit",
+      "gross_margin_pct",
+      "avg_order_value",
+      "avg_prep_time_min",
+      "complaints_count",
+      "refunds_amount"
+    ],
+    "date_columns": [
+      "date"
+    ],
+    "numeric_columns": [
+      "total_orders",
+      "total_customers",
+      "dine_in_orders",
+      "takeaway_orders",
+      "gross_revenue",
+      "discount_amount",
+      "net_revenue",
+      "food_cost",
+      "packaging_cost",
+      "labor_cost",
+      "overhead_cost",
+      "marketing_cost",
+      "total_cost",
+      "gross_profit",
+      "gross_margin_pct",
+      "avg_order_value",
+      "avg_prep_time_min",
+      "complaints_count",
+      "refunds_amount"
+    ]
+  },
+  "branch_monthly_summary": {
+    "rows": 60,
+    "cols": 16,
+    "columns": [
+      "month",
+      "branch_id",
+      "branch_name",
+      "city",
+      "total_orders",
+      "total_revenue",
+      "food_cost",
+      "packaging_cost",
+      "labor_cost",
+      "overhead_cost",
+      "marketing_cost",
+      "total_cost",
+      "gross_profit",
+      "gross_margin_pct",
+      "avg_order_value",
+      "complaint_rate_pct"
+    ],
+    "date_columns": [
+      "month"
+    ],
+    "numeric_columns": [
+      "total_orders",
+      "total_revenue",
+      "food_cost",
+      "packaging_cost",
+      "labor_cost",
+      "overhead_cost",
+      "marketing_cost",
+      "total_cost",
+      "gross_profit",
+      "gross_margin_pct",
+      "avg_order_value",
+      "complaint_rate_pct"
+    ]
+  },
+  "channel_sales_summary": {
+    "rows": 120,
+    "cols": 12,
+    "columns": [
+      "month",
+      "branch_id",
+      "city",
+      "channel",
+      "total_orders",
+      "units_sold",
+      "revenue",
+      "avg_order_value",
+      "food_cost",
+      "packaging_cost",
+      "gross_profit",
+      "gross_margin_pct"
+    ],
+    "date_columns": [
+      "month"
+    ],
+    "numeric_columns": [
+      "total_orders",
+      "units_sold",
+      "revenue",
+      "avg_order_value",
+      "food_cost",
+      "packaging_cost",
+      "gross_profit",
+      "gross_margin_pct"
+    ]
+  },
+  "cost_summary_monthly": {
+    "rows": 60,
+    "cols": 13,
+    "columns": [
+      "month",
+      "branch_id",
+      "city",
+      "revenue",
+      "food_cost",
+      "packaging_cost",
+      "labor_cost",
+      "overhead_cost",
+      "marketing_cost",
+      "refunds",
+      "total_cost",
+      "gross_profit",
+      "net_cash_like_surplus"
+    ],
+    "date_columns": [
+      "month"
+    ],
+    "numeric_columns": [
+      "revenue",
+      "food_cost",
+      "packaging_cost",
+      "labor_cost",
+      "overhead_cost",
+      "marketing_cost",
+      "refunds",
+      "total_cost",
+      "gross_profit",
+      "net_cash_like_surplus"
+    ]
+  },
+  "sku_margin_summary": {
+    "rows": 23,
+    "cols": 13,
+    "columns": [
+      "sku_id",
+      "sku_name",
+      "category",
+      "protein_type",
+      "price_di",
+      "price_dt",
+      "cost_di",
+      "cost_dt",
+      "gross_profit_di",
+      "gross_profit_dt",
+      "gross_margin_di_pct",
+      "gross_margin_dt_pct",
+      "loss_leader_flag"
+    ],
+    "date_columns": [],
+    "numeric_columns": [
+      "price_di",
+      "price_dt",
+      "cost_di",
+      "cost_dt",
+      "gross_profit_di",
+      "gross_profit_dt",
+      "gross_margin_di_pct",
+      "gross_margin_dt_pct",
+      "loss_leader_flag"
+    ]
+  },
+  "menu_engineering_flags": {
+    "rows": 23,
+    "cols": 8,
+    "columns": [
+      "sku_id",
+      "sku_name",
+      "category",
+      "popularity_band",
+      "margin_band",
+      "menu_engineering_quadrant",
+      "loss_leader_flag",
+      "action_hint"
+    ],
+    "date_columns": [],
+    "numeric_columns": [
+      "loss_leader_flag"
+    ]
+  },
+  "cash_flow_daily": {
+    "rows": 1825,
+    "cols": 6,
+    "columns": [
+      "date",
+      "branch_id",
+      "cash_in",
+      "cash_out",
+      "net_cash_flow",
+      "cumulative_cash"
+    ],
+    "date_columns": [
+      "date"
+    ],
+    "numeric_columns": [
+      "cash_in",
+      "cash_out",
+      "net_cash_flow",
+      "cumulative_cash"
+    ]
+  },
+  "expense_register": {
+    "rows": 3194,
+    "cols": 5,
+    "columns": [
+      "expense_id",
+      "date",
+      "branch_id",
+      "expense_type",
+      "amount"
+    ],
+    "date_columns": [
+      "date"
+    ],
+    "numeric_columns": [
+      "amount"
+    ]
+  },
+  "branches_master": {
+    "rows": 5,
+    "cols": 10,
+    "columns": [
+      "branch_id",
+      "branch_name",
+      "city",
+      "region",
+      "opening_date",
+      "branch_type",
+      "size_band",
+      "seating_capacity",
+      "kitchen_capacity_score",
+      "status"
+    ],
+    "date_columns": [
+      "opening_date"
+    ],
+    "numeric_columns": [
+      "seating_capacity",
+      "kitchen_capacity_score"
+    ]
+  },
+  "sku_master": {
+    "rows": 24,
+    "cols": 10,
+    "columns": [
+      "sku_id",
+      "sku_name",
+      "category",
+      "subcategory",
+      "protein_type",
+      "dine_in_price",
+      "takeaway_price",
+      "active_flag",
+      "launch_date",
+      "discontinue_date"
+    ],
+    "date_columns": [
+      "launch_date",
+      "discontinue_date"
+    ],
+    "numeric_columns": [
+      "dine_in_price",
+      "takeaway_price",
+      "active_flag"
+    ]
+  }
+}
