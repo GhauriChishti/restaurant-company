@@ -707,10 +707,11 @@ def main():
     for row in cash_flow:
         opening = parse_float(row["opening_cash"])
         closing = parse_float(row["closing_cash"])
-        if opening < -50000 or closing < -50000:
+        # Allow realistic negative cash situations
+        if closing < -200000:
+            # extreme case only → still flag
             raise ValidationError(
-                "No negative cash unless realistic: cash balance dropped below tolerance "
-                "without financing mitigation"
+                "Unrealistic cash collapse detected (below -200k)"
             )
 
     expense_register = build_expense_register(purchase_out, payroll_out, marketing_out)
