@@ -705,7 +705,6 @@ def main():
     cash_flow = build_cash_flow_daily(cash_in, purchase_out, payroll_out, marketing_out, date_start, date_end)
 
     for row in cash_flow:
-        opening = parse_float(row["opening_cash"])
         closing = parse_float(row["closing_cash"])
         # Allow realistic negative cash situations
         if closing < -200000:
