@@ -680,10 +680,26 @@ def main():
     marketing_out, m_min, m_max = collect_marketing_cash_out(marketing_rows, marketing_headers)
 
     dates = [d for d in [p_min, p_max, pay_min, pay_max, m_min, m_max] if d is not None]
-    if not dates:
-        raise ValidationError("Unable to derive date range from purchases/payroll/marketing")
-    date_start = min(dates)
-    date_end = max(dates)
+
+    if dates:
+        date_start = min(dates)
+        date_end = max(dates)
+    else:
+        # FALLBACK: derive from inventory dataset
+        inv_rows, inv_headers = inventory_rows, inventory_headers
+        date_col = pick_column(inv_headers, ["date", "stock_date", "inventory_date"])
+
+        all_dates = []
+        for row in inv_rows:
+            d = parse_date(row.get(date_col))
+            if d:
+                all_dates.append(d)
+
+        if not all_dates:
+            raise ValidationError("Unable to derive any date range from inputs")
+
+        date_start = min(all_dates)
+        date_end = max(all_dates)
 
     cash_in = build_cash_in_series(inventory_rows, inventory_headers, date_start, date_end)
     cash_flow = build_cash_flow_daily(cash_in, purchase_out, payroll_out, marketing_out, date_start, date_end)
