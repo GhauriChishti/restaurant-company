@@ -1,477 +1,694 @@
+#!/usr/bin/env python3
+"""Generate finance and risk datasets from core operational CSVs.
+
+Uses only Python standard library modules:
+- csv
+- random
+- datetime
+- collections
+- pathlib
+- os
+- math
+"""
+
 import csv
 import random
-from collections import defaultdict
-from datetime import date, datetime, timedelta
-from pathlib import Path
+import datetime
+import collections
+import pathlib
+import os
+import math
 
-SEED = 20260328
-random.seed(SEED)
 
-ROOT = Path(__file__).resolve().parents[1]
-
-INPUT_FILES = {
-    "purchase_orders": ROOT / "purchase_orders.csv",
-    "purchase_order_lines": ROOT / "purchase_order_lines.csv",
-    "suppliers": ROOT / "suppliers_master.csv",
-    "inventory_daily_stock": ROOT / "inventory_daily_stock.csv",
-    "hr_payroll": ROOT / "hr_payroll.csv",
-    "marketing_campaigns": ROOT / "marketing_campaigns.csv",
-    "branches": ROOT / "branches_master.csv",
-    "employees": ROOT / "employees_master.csv",
-    "sales_orders": ROOT / "sales_orders.csv",
+DEFAULT_FILES = {
+    "PURCHASE_ORDERS_PATH": "purchase_orders.csv",
+    "PURCHASE_ORDER_LINES_PATH": "purchase_order_lines.csv",
+    "SUPPLIERS_MASTER_PATH": "suppliers_master.csv",
+    "INVENTORY_STOCK_PATH": "inventory_daily_stock.csv",
+    "HR_PAYROLL_PATH": "hr_payroll.csv",
+    "MARKETING_CAMPAIGNS_PATH": "marketing_campaigns.csv",
 }
 
 OUTPUT_FILES = {
-    "supplier_performance": ROOT / "supplier_performance.csv",
-    "cash_flow_daily": ROOT / "cash_flow_daily.csv",
-    "expense_register": ROOT / "expense_register.csv",
-    "expansion_plan": ROOT / "expansion_plan.csv",
-    "risk_incidents": ROOT / "risk_incidents.csv",
-    "compliance_audit_log": ROOT / "compliance_audit_log.csv",
+    "supplier_performance": "supplier_performance.csv",
+    "cash_flow_daily": "cash_flow_daily.csv",
+    "expense_register": "expense_register.csv",
+    "expansion_plan": "expansion_plan.csv",
+    "risk_incidents": "risk_incidents.csv",
+    "compliance_audit_log": "compliance_audit_log.csv",
 }
 
 
-def read_csv(path: Path):
+class ValidationError(Exception):
+    """Raised when required input data quality checks fail."""
+
+
+def get_input_path(env_name):
+    return pathlib.Path(os.getenv(env_name, DEFAULT_FILES[env_name]))
+
+
+def get_output_dir():
+    return pathlib.Path(os.getenv("FINANCE_OUTPUT_DIR", "."))
+
+
+def read_csv(path):
     if not path.exists():
-        return []
-    with path.open("r", encoding="utf-8", newline="") as f:
-        return list(csv.DictReader(f))
+        raise FileNotFoundError(f"Missing required input file: {path}")
+
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+        headers = reader.fieldnames or []
+    if not headers:
+        raise ValidationError(f"CSV has no headers: {path}")
+    return rows, headers
 
 
-def write_csv(path: Path, fieldnames, rows):
-    with path.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
-        w.writeheader()
-        for row in rows:
-            w.writerow({k: row.get(k, "") for k in fieldnames})
+def normalize_key(key):
+    return (key or "").strip().lower()
 
 
-def parse_date(v):
-    t = str(v or "").strip()
-    if not t:
+def pick_column(headers, candidates, required=True):
+    normalized = {normalize_key(h): h for h in headers}
+    for candidate in candidates:
+        if normalize_key(candidate) in normalized:
+            return normalized[normalize_key(candidate)]
+    if required:
+        raise ValidationError(f"Could not find required column. Tried: {candidates}")
+    return None
+
+
+def parse_date(value):
+    text = (value or "").strip()
+    if not text:
         return None
-    t = t.split(" ")[0]
-    return datetime.strptime(t, "%Y-%m-%d").date()
+
+    formats = [
+        "%Y-%m-%d",
+        "%d-%m-%Y",
+        "%m/%d/%Y",
+        "%Y/%m/%d",
+        "%Y-%m-%d %H:%M:%S",
+    ]
+    for fmt in formats:
+        try:
+            return datetime.datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    raise ValidationError(f"Unrecognized date format: {value}")
 
 
-def parse_float(v, default=0.0):
+def parse_float(value, default=0.0):
+    text = (value or "").strip()
+    if not text:
+        return default
+    cleaned = text.replace(",", "")
     try:
-        return float(str(v).strip())
-    except Exception:
+        return float(cleaned)
+    except ValueError:
         return default
 
 
-def daterange(start_date, end_date):
-    d = start_date
-    while d <= end_date:
-        yield d
-        d += timedelta(days=1)
+def parse_int(value, default=0):
+    return int(round(parse_float(value, default=default)))
 
 
-def active_branches(branches):
-    return [b for b in branches if str(b.get("status", "Active")).lower() == "active"]
+def detect_branch_ids(data_map):
+    candidates = ["branch_id", "branch", "location_id", "store_id"]
+    branch_values_by_source = {}
 
+    for source_name, (rows, headers) in data_map.items():
+        column = pick_column(headers, candidates, required=False)
+        values = set()
+        if column:
+            for row in rows:
+                value = (row.get(column) or "").strip()
+                if value:
+                    values.add(value)
+        branch_values_by_source[source_name] = values
 
-def build_purchase_fallback(branches, suppliers, start_date, end_date):
-    po_rows = []
-    line_rows = []
-    po_seq = 1
-    pol_seq = 1
-    for d in daterange(start_date, end_date):
-        for br in branches:
-            # 1-2 purchase orders every third day per branch to avoid unrealistic spikes
-            if (d.toordinal() + int(br["branch_id"][-1])) % 3 != 0:
-                continue
-            for _ in range(1 if random.random() < 0.7 else 2):
-                supplier = random.choice(suppliers)
-                lead = max(1, int(parse_float(supplier.get("lead_time_days"), 2)))
-                promised = d + timedelta(days=lead)
-                delay = random.choices([0, 1, 2, 3], weights=[0.64, 0.23, 0.1, 0.03])[0]
-                received = promised + timedelta(days=delay)
-                po_id = f"POF{po_seq:07d}"
-                total = 0.0
-                for _i in range(random.randint(2, 4)):
-                    ordered = random.uniform(40, 220)
-                    rejection_rate = random.uniform(0.0, 0.06)
-                    received_qty = max(0.0, ordered * (1 - rejection_rate))
-                    unit_cost = random.uniform(2.5, 9.8)
-                    line_total = received_qty * unit_cost
-                    total += line_total
-                    line_rows.append(
-                        {
-                            "po_line_id": f"POLF{pol_seq:08d}",
-                            "po_id": po_id,
-                            "ingredient_id": f"ING{random.randint(1, 80):04d}",
-                            "ordered_qty": f"{ordered:.2f}",
-                            "received_qty": f"{received_qty:.2f}",
-                            "purchase_uom": "kg",
-                            "unit_cost": f"{unit_cost:.2f}",
-                            "line_total_cost": f"{line_total:.2f}",
-                            "quality_issue_flag": 1 if rejection_rate > 0.035 else 0,
-                            "rejection_qty": f"{max(0.0, ordered - received_qty):.2f}",
-                        }
-                    )
-                    pol_seq += 1
+    authoritative_sources = ["purchase_orders", "inventory_stock", "hr_payroll"]
+    master = set()
+    for source_name in authoritative_sources:
+        master.update(branch_values_by_source.get(source_name, set()))
 
-                po_rows.append(
-                    {
-                        "po_id": po_id,
-                        "po_date": d.isoformat(),
-                        "branch_id": br["branch_id"],
-                        "supplier_id": supplier["supplier_id"],
-                        "po_status": "Received",
-                        "promised_delivery_date": promised.isoformat(),
-                        "received_date": received.isoformat(),
-                        "payment_due_date": (received + timedelta(days=14)).isoformat(),
-                        "total_po_value": f"{total:.2f}",
-                    }
-                )
-                po_seq += 1
-    return po_rows, line_rows
+    if not master:
+        for source_name, values in branch_values_by_source.items():
+            if source_name != "suppliers_master":
+                master.update(values)
 
+    if not master:
+        raise ValidationError("No branch_id values found in branch-bearing input files")
 
-def build_supplier_performance(po_rows, line_rows):
-    line_by_po = defaultdict(list)
-    for line in line_rows:
-        line_by_po[line.get("po_id", "")].append(line)
-
-    daily_supplier = defaultdict(lambda: {"delay": 0.0, "fulfillment": 0.0, "quality": 0.0, "n": 0})
-    for po in po_rows:
-        po_date = parse_date(po.get("po_date"))
-        promised = parse_date(po.get("promised_delivery_date"))
-        received = parse_date(po.get("received_date")) or promised or po_date
-        if not po_date:
+    for source_name, values in branch_values_by_source.items():
+        if not values:
             continue
-        delay = max(0, (received - promised).days) if promised else 0
-
-        ordered = 0.0
-        received_qty = 0.0
-        quality_penalty = 0.0
-        for line in line_by_po.get(po.get("po_id", ""), []):
-            ordered += parse_float(line.get("ordered_qty"), 0.0)
-            received_qty += parse_float(line.get("received_qty"), 0.0)
-            rejection = parse_float(line.get("rejection_qty"), 0.0)
-            base = max(parse_float(line.get("ordered_qty"), 0.0), 1e-6)
-            quality_penalty += (rejection / base) * 35.0
-            if str(line.get("quality_issue_flag", "0")) == "1":
-                quality_penalty += 4.0
-
-        fulfillment = min(1.0, received_qty / ordered) if ordered > 0 else 1.0
-        quality = max(60.0, min(99.5, 97.0 - quality_penalty - delay * 1.7))
-
-        key = (po.get("supplier_id", ""), po_date.isoformat())
-        rec = daily_supplier[key]
-        rec["delay"] += delay
-        rec["fulfillment"] += fulfillment
-        rec["quality"] += quality
-        rec["n"] += 1
-
-    rows = []
-    for (supplier_id, day), vals in sorted(daily_supplier.items(), key=lambda x: (x[0][1], x[0][0])):
-        n = max(1, vals["n"])
-        rows.append(
-            {
-                "supplier_id": supplier_id,
-                "date": day,
-                "delivery_delay_days": f"{vals['delay']/n:.2f}",
-                "quality_score": f"{vals['quality']/n:.2f}",
-                "order_fulfillment_rate": f"{vals['fulfillment']/n:.4f}",
-            }
-        )
-    return rows
-
-
-def monthly_payroll_by_branch(payroll_rows, employees_rows):
-    out = defaultdict(float)
-    if payroll_rows:
-        for p in payroll_rows:
-            month = str(p.get("payroll_month", ""))[:7]
-            branch_id = p.get("branch_id", "")
-            out[(branch_id, month)] += parse_float(p.get("net_salary", 0.0), 0.0)
-    else:
-        branch_employees = defaultdict(list)
-        for e in employees_rows:
-            if str(e.get("status", "Active")).lower() != "inactive":
-                branch_employees[e.get("branch_id", "")].append(e)
-        for month in [f"2025-{m:02d}" for m in range(1, 13)]:
-            for branch_id, emps in branch_employees.items():
-                total = 0.0
-                for e in emps:
-                    sal = parse_float(e.get("salary_monthly"), 0.0)
-                    adj = random.uniform(0.97, 1.06)
-                    total += sal * adj
-                out[(branch_id, month)] += total
-    return out
-
-
-def marketing_daily(marketing_rows, branches, start_date, end_date):
-    out = defaultdict(float)
-    if marketing_rows:
-        for r in marketing_rows:
-            d = parse_date(r.get("date") or r.get("campaign_date"))
-            if not d:
-                continue
-            branch_id = r.get("branch_id", "")
-            out[(d.isoformat(), branch_id)] += parse_float(r.get("spend", r.get("campaign_spend", 0.0)), 0.0)
-    else:
-        promo_months = {2, 5, 8, 11}
-        branch_base = {b["branch_id"]: random.uniform(2400, 5200) for b in branches}
-        for d in daterange(start_date, end_date):
-            boost = 1.35 if d.month in promo_months else 1.0
-            for b in branches:
-                if random.random() < 0.43:
-                    spend = branch_base[b["branch_id"]] * random.uniform(0.75, 1.2) * boost
-                    out[(d.isoformat(), b["branch_id"])] += spend
-    return out
-
-
-def sales_cash_in(po_rows, branches, start_date, end_date):
-    # Build branch-level proxy sales using purchase activity to keep internal consistency
-    purchase_daily = defaultdict(float)
-    for po in po_rows:
-        d = parse_date(po.get("po_date"))
-        if not d:
-            continue
-        purchase_daily[(d.isoformat(), po.get("branch_id", ""))] += parse_float(po.get("total_po_value"), 0.0)
-
-    out = defaultdict(float)
-    for d in daterange(start_date, end_date):
-        for b in branches:
-            purchases = purchase_daily[(d.isoformat(), b["branch_id"])]
-            baseline = 128000 if b.get("city") in {"Karachi", "Lahore"} else 98000
-            sales = baseline + purchases * random.uniform(3.2, 4.2)
-            dow = d.weekday()
-            if dow >= 5:
-                sales *= 1.1
-            if d.month in {3, 4, 12}:
-                sales *= 1.06
-            out[(d.isoformat(), b["branch_id"])] = max(52000.0, sales)
-    return out
-
-
-def build_cash_and_expenses(po_rows, payroll_by_month, marketing_by_day, branches, start_date, end_date):
-    purchases_by_day = defaultdict(float)
-    for po in po_rows:
-        d = parse_date(po.get("po_date"))
-        if not d:
-            continue
-        purchases_by_day[(d.isoformat(), po.get("branch_id", ""))] += parse_float(po.get("total_po_value"), 0.0)
-
-    cash_in_by_day = sales_cash_in(po_rows, branches, start_date, end_date)
-
-    cash_rows = []
-    expense_rows = []
-    expense_seq = 1
-    cumulative_by_branch = defaultdict(lambda: random.uniform(180000, 260000))
-
-    for d in daterange(start_date, end_date):
-        day = d.isoformat()
-        month = day[:7]
-        for b in branches:
-            bid = b["branch_id"]
-            purchase = purchases_by_day[(day, bid)]
-            payroll_daily = payroll_by_month[(bid, month)] / 30.0
-            marketing = marketing_by_day[(day, bid)]
-            cash_out = purchase + payroll_daily + marketing
-            cash_in = cash_in_by_day[(day, bid)]
-            net = cash_in - cash_out
-            cumulative_by_branch[bid] += net
-
-            cash_rows.append(
-                {
-                    "date": day,
-                    "branch_id": bid,
-                    "cash_in": f"{cash_in:.2f}",
-                    "cash_out": f"{cash_out:.2f}",
-                    "net_cash_flow": f"{net:.2f}",
-                    "cumulative_cash": f"{cumulative_by_branch[bid]:.2f}",
-                }
+        invalid = values - master
+        if invalid:
+            sample = sorted(list(invalid))[:5]
+            raise ValidationError(
+                f"Invalid branch_id(s) in {source_name}: {sample}. "
+                "Each branch_id must be valid everywhere."
             )
 
-            for exp_type, amt in (
-                ("purchase", purchase),
-                ("payroll", payroll_daily),
-                ("marketing", marketing),
-            ):
-                if amt <= 0.0:
-                    continue
-                expense_rows.append(
-                    {
-                        "expense_id": f"EXP{expense_seq:010d}",
-                        "date": day,
-                        "branch_id": bid,
-                        "expense_type": exp_type,
-                        "amount": f"{amt:.2f}",
-                    }
-                )
-                expense_seq += 1
-
-    return cash_rows, expense_rows
+    return master
 
 
-def build_expansion_plan(branches):
-    cities = ["Multan", "Peshawar", "Sialkot", "Hyderabad"]
-    rows = []
-    start = date(2026, 5, 1)
-    for i, city in enumerate(cities, start=1):
-        flagship_bias = 1.2 if city in {"Multan", "Peshawar"} else 1.0
-        cost = random.uniform(340000, 620000) * flagship_bias
-        rows.append(
-            {
-                "new_branch_id": f"NB{i:03d}",
-                "city": city,
-                "opening_date": (start + timedelta(days=75 * (i - 1))).isoformat(),
-                "investment_cost": f"{cost:.2f}",
-                "ramp_up_months": random.choice([4, 5, 6, 7]),
-            }
-        )
-    return rows
+def validate_supplier_and_purchase_linkage(po_rows, po_headers, line_rows, line_headers, supplier_rows, supplier_headers):
+    supplier_col = pick_column(supplier_headers, ["supplier_id", "vendor_id", "id"])
+    po_supplier_col = pick_column(po_headers, ["supplier_id", "vendor_id", "supplier"])
+    po_id_col = pick_column(po_headers, ["purchase_order_id", "po_id", "order_id", "id"])
+    line_po_col = pick_column(line_headers, ["purchase_order_id", "po_id", "order_id"])
+
+    supplier_ids = {
+        (row.get(supplier_col) or "").strip()
+        for row in supplier_rows
+        if (row.get(supplier_col) or "").strip()
+    }
+    if not supplier_ids:
+        raise ValidationError("No supplier IDs found in suppliers_master.csv")
+
+    po_ids = set()
+    missing_supplier = []
+    for row in po_rows:
+        po_id = (row.get(po_id_col) or "").strip()
+        supplier_id = (row.get(po_supplier_col) or "").strip()
+        if po_id:
+            po_ids.add(po_id)
+        if supplier_id and supplier_id not in supplier_ids:
+            missing_supplier.append((po_id, supplier_id))
+
+    if missing_supplier:
+        sample = missing_supplier[:5]
+        raise ValidationError(f"Supplier must exist. Missing supplier references in purchase_orders: {sample}")
+
+    invalid_lines = []
+    for row in line_rows:
+        linked_po = (row.get(line_po_col) or "").strip()
+        if linked_po and linked_po not in po_ids:
+            invalid_lines.append(linked_po)
+
+    if invalid_lines:
+        sample = sorted(set(invalid_lines))[:5]
+        raise ValidationError(f"Purchase linkage invalid. Unknown purchase_order_id(s): {sample}")
+
+    return {
+        "supplier_col": supplier_col,
+        "po_supplier_col": po_supplier_col,
+        "po_id_col": po_id_col,
+        "line_po_col": line_po_col,
+    }
 
 
-def build_risk_and_compliance(branches, start_date, end_date):
-    risk_rows = []
-    audit_rows = []
-    risk_seq = 1
-    audit_seq = 1
+def build_supplier_performance(po_rows, po_headers, supplier_rows, supplier_headers, linkage_cols):
+    supplier_col = linkage_cols["supplier_col"]
+    po_supplier_col = linkage_cols["po_supplier_col"]
 
-    types = ["Food Safety", "Workplace Injury", "POS Downtime", "Theft", "Fire Drill Gap"]
-    severities = ["Low", "Medium", "High"]
+    expected_col = pick_column(po_headers, ["expected_delivery_date", "eta_date", "promised_date"], required=False)
+    actual_col = pick_column(po_headers, ["actual_delivery_date", "received_date", "delivery_date"], required=False)
+    quality_col = pick_column(po_headers, ["quality_score", "inspection_score"], required=False)
 
-    for d in daterange(start_date, end_date):
-        day = d.isoformat()
-        for b in branches:
-            bid = b["branch_id"]
-            # occasional incidents only
-            if random.random() < 0.018:
-                sev = random.choices(severities, weights=[0.64, 0.29, 0.07])[0]
-                risk_rows.append(
-                    {
-                        "incident_id": f"RISK{risk_seq:08d}",
-                        "date": day,
-                        "branch_id": bid,
-                        "incident_type": random.choice(types),
-                        "severity": sev,
-                    }
-                )
-                risk_seq += 1
+    supplier_name_col = pick_column(supplier_headers, ["supplier_name", "vendor_name", "name"], required=False)
 
-            compliance = max(70.0, min(99.8, random.gauss(91.8, 3.4)))
-            if random.random() < 0.06:
-                compliance -= random.uniform(6.0, 12.0)
-            violation = 1 if compliance < 85.0 else 0
-            audit_rows.append(
-                {
-                    "audit_id": f"AUD{audit_seq:09d}",
-                    "date": day,
-                    "branch_id": bid,
-                    "compliance_score": f"{max(60.0, compliance):.2f}",
-                    "violation_flag": violation,
-                }
-            )
-            audit_seq += 1
-
-    return risk_rows, audit_rows
-
-
-def run_validations(supplier_rows, cash_rows, expense_rows, po_rows):
-    # supplier linked to purchase
-    po_supplier_pairs = {(po.get("supplier_id", ""), po.get("po_date", "")) for po in po_rows}
+    supplier_names = {}
     for row in supplier_rows:
-        key = (row["supplier_id"], row["date"])
-        if key not in po_supplier_pairs:
-            raise ValueError(f"supplier_performance row not linked to purchase_orders: {key}")
+        sid = (row.get(supplier_col) or "").strip()
+        if sid:
+            supplier_names[sid] = (row.get(supplier_name_col) or sid).strip() if supplier_name_col else sid
 
-    # cash flow consistency
-    for row in cash_rows[:2000] + cash_rows[-2000:]:
-        cin = parse_float(row["cash_in"])
-        cout = parse_float(row["cash_out"])
-        net = parse_float(row["net_cash_flow"])
-        if abs((cin - cout) - net) > 0.05:
-            raise ValueError("cash flow consistency failed")
+    stats = collections.defaultdict(lambda: {
+        "orders": 0,
+        "on_time": 0,
+        "delay_days": 0.0,
+        "quality_sum": 0.0,
+        "quality_count": 0,
+    })
 
-    # no extreme spikes: check 99th percentile vs median
-    by_branch = defaultdict(list)
-    for row in cash_rows:
-        by_branch[row["branch_id"]].append(parse_float(row["cash_in"]))
-    for branch, vals in by_branch.items():
-        vals = sorted(vals)
-        med = vals[len(vals) // 2]
-        p99 = vals[int(len(vals) * 0.99)]
-        if med > 0 and p99 / med > 3.2:
-            raise ValueError(f"unrealistic spike detected in cash_in for {branch}")
+    for row in po_rows:
+        sid = (row.get(po_supplier_col) or "").strip()
+        if not sid:
+            continue
+        stat = stats[sid]
+        stat["orders"] += 1
 
-    # cumulative cash warning threshold (allow negative if realistic)
-    neg_count = sum(1 for r in cash_rows if parse_float(r["cumulative_cash"]) < 0)
-    if neg_count > int(0.2 * len(cash_rows)):
-        raise ValueError("too many negative cumulative cash rows; unrealistic scenario")
+        expected = parse_date(row.get(expected_col)) if expected_col else None
+        actual = parse_date(row.get(actual_col)) if actual_col else None
+        if expected and actual:
+            delay = (actual - expected).days
+            if delay <= 0:
+                stat["on_time"] += 1
+            stat["delay_days"] += max(0, delay)
+        else:
+            proxy_delay = max(0, random.gauss(1.8, 2.2))
+            if proxy_delay <= 1:
+                stat["on_time"] += 1
+            stat["delay_days"] += proxy_delay
 
-    if not expense_rows:
-        raise ValueError("expense_register cannot be empty")
+        if quality_col:
+            q = parse_float(row.get(quality_col), default=0.0)
+            if q > 0:
+                stat["quality_sum"] += q
+                stat["quality_count"] += 1
+            else:
+                synth_q = min(100.0, max(70.0, random.gauss(89, 6)))
+                stat["quality_sum"] += synth_q
+                stat["quality_count"] += 1
+        else:
+            synth_q = min(100.0, max(70.0, random.gauss(88, 7)))
+            stat["quality_sum"] += synth_q
+            stat["quality_count"] += 1
+
+    rows = []
+    for sid in sorted(stats.keys()):
+        s = stats[sid]
+        orders = max(1, s["orders"])
+        quality_avg = s["quality_sum"] / max(1, s["quality_count"])
+        on_time_rate = 100.0 * s["on_time"] / orders
+        avg_delay = s["delay_days"] / orders
+        reliability = max(0.0, min(100.0, 100.0 - avg_delay * 4.5 + (quality_avg - 85.0) * 0.8))
+        rows.append({
+            "supplier_id": sid,
+            "supplier_name": supplier_names.get(sid, sid),
+            "total_orders": str(orders),
+            "on_time_rate_pct": f"{on_time_rate:.2f}",
+            "avg_delay_days": f"{avg_delay:.2f}",
+            "quality_score_avg": f"{quality_avg:.2f}",
+            "reliability_index": f"{reliability:.2f}",
+        })
+
+    return rows
+
+
+def collect_purchase_cash_out(po_rows, po_headers):
+    amount_col = pick_column(po_headers, ["total_amount", "order_total", "amount", "grand_total"], required=False)
+    expected_col = pick_column(po_headers, ["actual_delivery_date", "received_date", "delivery_date", "expected_delivery_date"], required=False)
+
+    cash_out = collections.defaultdict(float)
+    min_date = None
+    max_date = None
+
+    for row in po_rows:
+        if not amount_col:
+            continue
+        amount = max(0.0, parse_float(row.get(amount_col), default=0.0))
+        if amount <= 0:
+            continue
+
+        delivery_date = parse_date(row.get(expected_col)) if expected_col else None
+        if delivery_date is None:
+            continue
+
+        payment_lag = max(0, int(round(random.gauss(8, 5))))
+        payment_date = delivery_date + datetime.timedelta(days=payment_lag)
+        cash_out[payment_date] += amount
+
+        min_date = payment_date if min_date is None else min(min_date, payment_date)
+        max_date = payment_date if max_date is None else max(max_date, payment_date)
+
+    return cash_out, min_date, max_date
+
+
+def collect_payroll_cash_out(hr_rows, hr_headers):
+    date_col = pick_column(hr_headers, ["pay_date", "payroll_date", "date"])
+    amount_col = pick_column(hr_headers, ["net_pay", "gross_pay", "pay_amount", "amount"])
+
+    cash_out = collections.defaultdict(float)
+    min_date = None
+    max_date = None
+
+    for row in hr_rows:
+        d = parse_date(row.get(date_col))
+        if d is None:
+            continue
+        amount = max(0.0, parse_float(row.get(amount_col), default=0.0))
+        cash_out[d] += amount
+        min_date = d if min_date is None else min(min_date, d)
+        max_date = d if max_date is None else max(max_date, d)
+
+    return cash_out, min_date, max_date
+
+
+def collect_marketing_cash_out(marketing_rows, marketing_headers):
+    spend_col = pick_column(marketing_headers, ["spend", "budget", "amount", "cost"])
+    start_col = pick_column(marketing_headers, ["campaign_date", "start_date", "launch_date", "date"], required=False)
+    end_col = pick_column(marketing_headers, ["end_date", "campaign_end_date"], required=False)
+
+    cash_out = collections.defaultdict(float)
+    min_date = None
+    max_date = None
+
+    for row in marketing_rows:
+        total = max(0.0, parse_float(row.get(spend_col), default=0.0))
+        if total <= 0:
+            continue
+
+        start_date = parse_date(row.get(start_col)) if start_col else None
+        end_date = parse_date(row.get(end_col)) if end_col else None
+
+        if start_date is None:
+            continue
+        if end_date is None or end_date < start_date:
+            end_date = start_date
+
+        days = (end_date - start_date).days + 1
+        daily = total / max(1, days)
+        for offset in range(days):
+            d = start_date + datetime.timedelta(days=offset)
+            cash_out[d] += daily
+            min_date = d if min_date is None else min(min_date, d)
+            max_date = d if max_date is None else max(max_date, d)
+
+    return cash_out, min_date, max_date
+
+
+def build_cash_in_series(inventory_rows, inventory_headers, date_start, date_end):
+    date_col = pick_column(inventory_headers, ["date", "stock_date", "inventory_date"])
+    branch_col = pick_column(inventory_headers, ["branch_id", "branch", "store_id", "location_id"])
+    stock_value_col = pick_column(inventory_headers, ["stock_value", "closing_stock_value", "inventory_value", "value"])
+
+    stock_by_branch_day = collections.defaultdict(dict)
+    for row in inventory_rows:
+        d = parse_date(row.get(date_col))
+        branch_id = (row.get(branch_col) or "").strip()
+        if not d or not branch_id:
+            continue
+        stock_by_branch_day[branch_id][d] = parse_float(row.get(stock_value_col), default=0.0)
+
+    cash_in_by_day = collections.defaultdict(float)
+
+    for branch_id, day_map in stock_by_branch_day.items():
+        days_sorted = sorted(day_map.keys())
+        prev_val = None
+        for day in days_sorted:
+            stock_val = max(0.0, day_map[day])
+            if prev_val is not None:
+                stock_drop = max(0.0, prev_val - stock_val)
+            else:
+                stock_drop = 0.0
+
+            turnover_proxy = stock_drop * random.uniform(1.25, 1.9)
+            baseline = max(150.0, math.sqrt(stock_val + 1.0) * random.uniform(18.0, 36.0))
+            weekday = day.weekday()
+            weekday_factor = 1.1 if weekday in (4, 5) else (0.93 if weekday == 0 else 1.0)
+
+            sales = max(0.0, (turnover_proxy + baseline) * weekday_factor)
+            cash_in_by_day[day] += sales
+            prev_val = stock_val
+
+    cursor = date_start
+    while cursor <= date_end:
+        cash_in_by_day[cursor] += random.uniform(1200.0, 3200.0)
+        cursor += datetime.timedelta(days=1)
+
+    return cash_in_by_day
+
+
+def build_cash_flow_daily(cash_in_by_day, purchase_out, payroll_out, marketing_out, date_start, date_end):
+    rows = []
+    opening = max(50000.0, sum(cash_in_by_day.values()) * 0.08)
+
+    cursor = date_start
+    while cursor <= date_end:
+        cash_in = cash_in_by_day.get(cursor, 0.0)
+        purchases = purchase_out.get(cursor, 0.0)
+        payroll = payroll_out.get(cursor, 0.0)
+        marketing = marketing_out.get(cursor, 0.0)
+        cash_out = purchases + payroll + marketing
+
+        projected = opening + cash_in - cash_out
+        financing = 0.0
+
+        if projected < -20000:
+            financing = abs(projected) + random.uniform(10000, 25000)
+        elif projected < 0:
+            if random.random() < 0.45:
+                financing = abs(projected) + random.uniform(1000, 6000)
+
+        closing = projected + financing
+
+        rows.append({
+            "date": cursor.isoformat(),
+            "opening_cash": f"{opening:.2f}",
+            "cash_in_sales": f"{cash_in:.2f}",
+            "cash_out_purchases": f"{purchases:.2f}",
+            "cash_out_payroll": f"{payroll:.2f}",
+            "cash_out_marketing": f"{marketing:.2f}",
+            "financing_inflow": f"{financing:.2f}",
+            "closing_cash": f"{closing:.2f}",
+        })
+
+        opening = closing
+        cursor += datetime.timedelta(days=1)
+
+    return rows
+
+
+def build_expense_register(purchase_out, payroll_out, marketing_out):
+    all_days = sorted(set(purchase_out) | set(payroll_out) | set(marketing_out))
+    rows = []
+    seq = 1
+    for day in all_days:
+        if purchase_out.get(day, 0.0) > 0:
+            rows.append({
+                "expense_id": f"EXP-{seq:06d}",
+                "date": day.isoformat(),
+                "category": "COGS_PURCHASES",
+                "sub_category": "Supplier Payments",
+                "amount": f"{purchase_out[day]:.2f}",
+                "payment_mode": random.choice(["Bank Transfer", "Credit Terms"]),
+            })
+            seq += 1
+
+        if payroll_out.get(day, 0.0) > 0:
+            rows.append({
+                "expense_id": f"EXP-{seq:06d}",
+                "date": day.isoformat(),
+                "category": "PAYROLL",
+                "sub_category": "Staff Salaries",
+                "amount": f"{payroll_out[day]:.2f}",
+                "payment_mode": "Bank Transfer",
+            })
+            seq += 1
+
+        if marketing_out.get(day, 0.0) > 0:
+            rows.append({
+                "expense_id": f"EXP-{seq:06d}",
+                "date": day.isoformat(),
+                "category": "MARKETING",
+                "sub_category": random.choice(["Digital Ads", "Promotions", "Local Activations"]),
+                "amount": f"{marketing_out[day]:.2f}",
+                "payment_mode": random.choice(["Credit Card", "Bank Transfer"]),
+            })
+            seq += 1
+
+    return rows
+
+
+def build_expansion_plan(branch_ids, anchor_date):
+    branches = sorted(branch_ids)
+    current_count = len(branches)
+    additions = max(2, int(round(current_count * 0.35)))
+
+    rows = []
+    for idx in range(1, additions + 1):
+        launch = anchor_date + datetime.timedelta(days=idx * random.randint(45, 75))
+        capex = random.uniform(180000, 350000)
+        month1_sales = random.uniform(40000, 90000)
+        ramp_factor = random.uniform(1.04, 1.12)
+        month6_sales = month1_sales * (ramp_factor ** 5)
+
+        rows.append({
+            "new_branch_id": f"NB-{idx:03d}",
+            "planned_launch_date": launch.isoformat(),
+            "capex_budget": f"{capex:.2f}",
+            "month_1_revenue": f"{month1_sales:.2f}",
+            "month_6_revenue": f"{month6_sales:.2f}",
+            "ramp_profile": random.choice(["Slow-Start", "Balanced", "Aggressive"]),
+            "status": random.choice(["Approved", "Under Review"]),
+        })
+
+    return rows
+
+
+def build_risk_incidents(branch_ids, supplier_perf_rows, date_start, date_end):
+    suppliers_ranked = sorted(
+        supplier_perf_rows,
+        key=lambda r: parse_float(r.get("reliability_index"), default=100.0)
+    )
+    riskier_suppliers = [row["supplier_id"] for row in suppliers_ranked[:max(1, len(suppliers_ranked) // 3)]]
+
+    rows = []
+    incident_id = 1
+
+    total_days = (date_end - date_start).days + 1
+    baseline_events = max(3, int(total_days * len(branch_ids) * 0.006))
+
+    for _ in range(baseline_events):
+        day_offset = random.randint(0, max(0, total_days - 1))
+        day = date_start + datetime.timedelta(days=day_offset)
+        branch = random.choice(sorted(list(branch_ids)))
+        event_type = random.choices(
+            ["supplier_delay", "quality_failure", "cash_shortfall", "compliance_gap", "inventory_loss"],
+            weights=[30, 22, 18, 15, 15],
+            k=1,
+        )[0]
+
+        supplier_id = ""
+        if event_type in ("supplier_delay", "quality_failure") and riskier_suppliers:
+            supplier_id = random.choice(riskier_suppliers)
+
+        impact = {
+            "supplier_delay": random.uniform(1200, 9000),
+            "quality_failure": random.uniform(1800, 12000),
+            "cash_shortfall": random.uniform(1000, 8000),
+            "compliance_gap": random.uniform(500, 6000),
+            "inventory_loss": random.uniform(700, 7000),
+        }[event_type]
+
+        rows.append({
+            "incident_id": f"RISK-{incident_id:05d}",
+            "incident_date": day.isoformat(),
+            "branch_id": branch,
+            "risk_type": event_type,
+            "supplier_id": supplier_id,
+            "severity": random.choices(["Low", "Medium", "High"], weights=[45, 40, 15], k=1)[0],
+            "estimated_financial_impact": f"{impact:.2f}",
+            "status": random.choice(["Open", "Mitigated", "Closed"]),
+        })
+        incident_id += 1
+
+    rows.sort(key=lambda r: r["incident_date"])
+    return rows
+
+
+def build_compliance_audit_log(branch_ids, date_start, date_end):
+    rows = []
+    seq = 1
+
+    cursor = datetime.date(date_start.year, date_start.month, 1)
+    end_month = datetime.date(date_end.year, date_end.month, 1)
+
+    branches_sorted = sorted(list(branch_ids))
+
+    while cursor <= end_month:
+        for branch in branches_sorted:
+            score = min(100.0, max(72.0, random.gauss(88.0, 5.5)))
+            findings = 0
+            if score < 80:
+                findings = random.randint(2, 5)
+            elif score < 88:
+                findings = random.randint(1, 3)
+            else:
+                findings = random.randint(0, 1)
+
+            rows.append({
+                "audit_id": f"AUD-{seq:06d}",
+                "audit_date": cursor.isoformat(),
+                "branch_id": branch,
+                "audit_area": random.choice(["Finance Controls", "Procurement", "Payroll", "Data Governance"]),
+                "compliance_score": f"{score:.2f}",
+                "findings_count": str(findings),
+                "result": "Pass" if score >= 80 else "Conditional",
+                "owner": random.choice(["Finance Ops", "Internal Audit", "Risk Office"]),
+            })
+            seq += 1
+
+        next_month = cursor.month + 1
+        next_year = cursor.year
+        if next_month > 12:
+            next_month = 1
+            next_year += 1
+        cursor = datetime.date(next_year, next_month, 1)
+
+    return rows
+
+
+def write_csv(path, rows):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            handle.write("")
+        return
+
+    headers = list(rows[0].keys())
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def main():
-    suppliers = read_csv(INPUT_FILES["suppliers"])
-    branches = active_branches(read_csv(INPUT_FILES["branches"]))
-    employees = read_csv(INPUT_FILES["employees"])
+    random.seed(42)
 
-    if not suppliers or not branches:
-        raise FileNotFoundError("Required supplier/branch masters are missing or empty.")
+    po_rows, po_headers = read_csv(get_input_path("PURCHASE_ORDERS_PATH"))
+    line_rows, line_headers = read_csv(get_input_path("PURCHASE_ORDER_LINES_PATH"))
+    supplier_rows, supplier_headers = read_csv(get_input_path("SUPPLIERS_MASTER_PATH"))
+    inventory_rows, inventory_headers = read_csv(get_input_path("INVENTORY_STOCK_PATH"))
+    hr_rows, hr_headers = read_csv(get_input_path("HR_PAYROLL_PATH"))
+    marketing_rows, marketing_headers = read_csv(get_input_path("MARKETING_CAMPAIGNS_PATH"))
 
-    po_rows = read_csv(INPUT_FILES["purchase_orders"])
-    pol_rows = read_csv(INPUT_FILES["purchase_order_lines"])
+    data_map = {
+        "purchase_orders": (po_rows, po_headers),
+        "purchase_order_lines": (line_rows, line_headers),
+        "suppliers_master": (supplier_rows, supplier_headers),
+        "inventory_stock": (inventory_rows, inventory_headers),
+        "hr_payroll": (hr_rows, hr_headers),
+        "marketing_campaigns": (marketing_rows, marketing_headers),
+    }
 
-    start_date, end_date = date(2025, 1, 1), date(2025, 12, 31)
-    if po_rows:
-        po_dates = sorted([parse_date(r.get("po_date")) for r in po_rows if parse_date(r.get("po_date"))])
-        if po_dates:
-            start_date, end_date = po_dates[0], po_dates[-1]
-    else:
-        po_rows, pol_rows = build_purchase_fallback(branches, suppliers, start_date, end_date)
+    branch_ids = detect_branch_ids(data_map)
 
-    supplier_perf = build_supplier_performance(po_rows, pol_rows)
-    payroll_by_month = monthly_payroll_by_branch(read_csv(INPUT_FILES["hr_payroll"]), employees)
-    marketing_by_day = marketing_daily(read_csv(INPUT_FILES["marketing_campaigns"]), branches, start_date, end_date)
-
-    cash_rows, expense_rows = build_cash_and_expenses(po_rows, payroll_by_month, marketing_by_day, branches, start_date, end_date)
-    expansion_rows = build_expansion_plan(branches)
-    risk_rows, audit_rows = build_risk_and_compliance(branches, start_date, end_date)
-
-    run_validations(supplier_perf, cash_rows, expense_rows, po_rows)
-
-    write_csv(
-        OUTPUT_FILES["supplier_performance"],
-        ["supplier_id", "date", "delivery_delay_days", "quality_score", "order_fulfillment_rate"],
-        supplier_perf,
-    )
-    write_csv(
-        OUTPUT_FILES["cash_flow_daily"],
-        ["date", "branch_id", "cash_in", "cash_out", "net_cash_flow", "cumulative_cash"],
-        cash_rows,
-    )
-    write_csv(
-        OUTPUT_FILES["expense_register"],
-        ["expense_id", "date", "branch_id", "expense_type", "amount"],
-        expense_rows,
-    )
-    write_csv(
-        OUTPUT_FILES["expansion_plan"],
-        ["new_branch_id", "city", "opening_date", "investment_cost", "ramp_up_months"],
-        expansion_rows,
-    )
-    write_csv(
-        OUTPUT_FILES["risk_incidents"],
-        ["incident_id", "date", "branch_id", "incident_type", "severity"],
-        risk_rows,
-    )
-    write_csv(
-        OUTPUT_FILES["compliance_audit_log"],
-        ["audit_id", "date", "branch_id", "compliance_score", "violation_flag"],
-        audit_rows,
+    linkage_cols = validate_supplier_and_purchase_linkage(
+        po_rows,
+        po_headers,
+        line_rows,
+        line_headers,
+        supplier_rows,
+        supplier_headers,
     )
 
-    print("Generated files:")
-    for key, path in OUTPUT_FILES.items():
-        print(f"- {key}: {path}")
+    supplier_performance = build_supplier_performance(
+        po_rows,
+        po_headers,
+        supplier_rows,
+        supplier_headers,
+        linkage_cols,
+    )
+
+    purchase_out, p_min, p_max = collect_purchase_cash_out(po_rows, po_headers)
+    payroll_out, pay_min, pay_max = collect_payroll_cash_out(hr_rows, hr_headers)
+    marketing_out, m_min, m_max = collect_marketing_cash_out(marketing_rows, marketing_headers)
+
+    dates = [d for d in [p_min, p_max, pay_min, pay_max, m_min, m_max] if d is not None]
+    if not dates:
+        raise ValidationError("Unable to derive date range from purchases/payroll/marketing")
+    date_start = min(dates)
+    date_end = max(dates)
+
+    cash_in = build_cash_in_series(inventory_rows, inventory_headers, date_start, date_end)
+    cash_flow = build_cash_flow_daily(cash_in, purchase_out, payroll_out, marketing_out, date_start, date_end)
+
+    for row in cash_flow:
+        opening = parse_float(row["opening_cash"])
+        closing = parse_float(row["closing_cash"])
+        if opening < -50000 or closing < -50000:
+            raise ValidationError(
+                "No negative cash unless realistic: cash balance dropped below tolerance "
+                "without financing mitigation"
+            )
+
+    expense_register = build_expense_register(purchase_out, payroll_out, marketing_out)
+    expansion_plan = build_expansion_plan(branch_ids, date_end + datetime.timedelta(days=30))
+    risk_incidents = build_risk_incidents(branch_ids, supplier_performance, date_start, date_end)
+    compliance_log = build_compliance_audit_log(branch_ids, date_start, date_end)
+
+    output_dir = get_output_dir()
+    write_csv(output_dir / OUTPUT_FILES["supplier_performance"], supplier_performance)
+    write_csv(output_dir / OUTPUT_FILES["cash_flow_daily"], cash_flow)
+    write_csv(output_dir / OUTPUT_FILES["expense_register"], expense_register)
+    write_csv(output_dir / OUTPUT_FILES["expansion_plan"], expansion_plan)
+    write_csv(output_dir / OUTPUT_FILES["risk_incidents"], risk_incidents)
+    write_csv(output_dir / OUTPUT_FILES["compliance_audit_log"], compliance_log)
 
 
 if __name__ == "__main__":
