@@ -309,7 +309,7 @@ def collect_purchase_cash_out(po_rows, po_headers):
 
 
 def collect_payroll_cash_out(hr_rows, hr_headers):
-    date_col = pick_column(hr_headers, ["pay_date", "payroll_date", "date"])
+    date_col = pick_column(hr_headers, ["pay_date", "payroll_date", "date", "month"])
     amount_col = pick_column(hr_headers, ["net_pay", "gross_pay", "pay_amount", "amount"])
 
     cash_out = collections.defaultdict(float)
@@ -317,7 +317,14 @@ def collect_payroll_cash_out(hr_rows, hr_headers):
     max_date = None
 
     for row in hr_rows:
-        d = parse_date(row.get(date_col))
+        if normalize_key(date_col) == "month":
+            month_text = (row.get(date_col) or "").strip()
+            if not month_text:
+                continue
+            d = parse_date(f"{month_text}-28")
+        else:
+            d = parse_date(row.get(date_col))
+
         if d is None:
             continue
         amount = max(0.0, parse_float(row.get(amount_col), default=0.0))
