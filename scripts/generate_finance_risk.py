@@ -310,7 +310,7 @@ def collect_purchase_cash_out(po_rows, po_headers):
 
 def collect_payroll_cash_out(hr_rows, hr_headers):
     date_col = pick_column(hr_headers, ["pay_date", "payroll_date", "date", "month"])
-    amount_col = pick_column(hr_headers, ["net_pay", "gross_pay", "pay_amount", "amount"])
+    amount_col = pick_column(hr_headers, ["net_salary", "net_pay", "gross_pay", "pay_amount", "amount"])
 
     cash_out = collections.defaultdict(float)
     min_date = None
