@@ -310,7 +310,20 @@ def collect_purchase_cash_out(po_rows, po_headers):
 
 def collect_payroll_cash_out(hr_rows, hr_headers):
     date_col = pick_column(hr_headers, ["pay_date", "payroll_date", "date", "month"])
-    amount_col = pick_column(hr_headers, ["net_salary", "net_pay", "gross_pay", "pay_amount", "amount"])
+    amount_col = pick_column(
+        hr_headers,
+        ["net_salary", "net pay", "netpay", "net_salary ", "net_pay", "gross_pay", "pay_amount", "amount"],
+        required=False
+    )
+    base_col = None
+    overtime_col = None
+    bonus_col = None
+    deductions_col = None
+    if amount_col is None:
+        base_col = pick_column(hr_headers, ["base_salary", "basic_salary"], required=False)
+        overtime_col = pick_column(hr_headers, ["overtime_pay", "overtime"], required=False)
+        bonus_col = pick_column(hr_headers, ["bonus"], required=False)
+        deductions_col = pick_column(hr_headers, ["deductions"], required=False)
 
     cash_out = collections.defaultdict(float)
     min_date = None
@@ -327,7 +340,15 @@ def collect_payroll_cash_out(hr_rows, hr_headers):
 
         if d is None:
             continue
-        amount = max(0.0, parse_float(row.get(amount_col), default=0.0))
+        if amount_col is not None:
+            amount = parse_float(row.get(amount_col), default=0.0)
+        else:
+            base = parse_float(row.get(base_col) if base_col else None, default=0.0)
+            overtime = parse_float(row.get(overtime_col) if overtime_col else None, default=0.0)
+            bonus = parse_float(row.get(bonus_col) if bonus_col else None, default=0.0)
+            deductions = parse_float(row.get(deductions_col) if deductions_col else None, default=0.0)
+            amount = base + overtime + bonus - deductions
+        amount = max(0.0, amount)
         cash_out[d] += amount
         min_date = d if min_date is None else min(min_date, d)
         max_date = d if max_date is None else max(max_date, d)
