@@ -1,4 +1,5 @@
 import csv
+import os
 import random
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -10,20 +11,21 @@ random.seed(SEED)
 ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED_FILES = {
-    "branches": ROOT / "branches_master.csv",
-    "employees": ROOT / "employees_master.csv",
-    "sales_orders": ROOT / "sales_orders.csv",
-    "sales_order_lines": ROOT / "sales_order_lines.csv",
-    "kitchen_batch_runs": ROOT / "kitchen_batch_runs.csv",
-    "inventory_daily_stock": ROOT / "inventory_daily_stock.csv",
+    "branches": Path(os.environ.get("BRANCHES_MASTER_PATH", ROOT / "branches_master.csv")),
+    "employees": Path(os.environ.get("EMPLOYEES_MASTER_PATH", ROOT / "employees_master.csv")),
+    "sales_orders": Path(os.environ.get("SALES_ORDERS_PATH", ROOT / "sales_orders.csv")),
+    "sales_order_lines": Path(os.environ.get("SALES_ORDER_LINES_PATH", ROOT / "sales_order_lines.csv")),
+    "kitchen_batch_runs": Path(os.environ.get("KITCHEN_BATCH_RUNS_PATH", ROOT / "kitchen_batch_runs.csv")),
+    "inventory_daily_stock": Path(os.environ.get("INVENTORY_DAILY_STOCK_PATH", ROOT / "inventory_daily_stock.csv")),
 }
 
+OUTPUT_DIR = Path(os.environ.get("OPERATIONS_HR_OUTPUT_DIR", ROOT))
 OUTPUT_FILES = {
-    "operations_shift_log": ROOT / "operations_shift_log.csv",
-    "operations_store_daily_metrics": ROOT / "operations_store_daily_metrics.csv",
-    "hr_attendance": ROOT / "hr_attendance.csv",
-    "hr_payroll": ROOT / "hr_payroll.csv",
-    "hr_employee_productivity": ROOT / "hr_employee_productivity.csv",
+    "operations_shift_log": OUTPUT_DIR / "operations_shift_log.csv",
+    "operations_store_daily_metrics": OUTPUT_DIR / "operations_store_daily_metrics.csv",
+    "hr_attendance": OUTPUT_DIR / "hr_attendance.csv",
+    "hr_payroll": OUTPUT_DIR / "hr_payroll.csv",
+    "hr_employee_productivity": OUTPUT_DIR / "hr_employee_productivity.csv",
 }
 
 SHIFT_TYPES = ("Morning", "Evening", "Night")
@@ -459,6 +461,7 @@ def validate_outputs(employees, attendance, payroll, productivity):
 
 
 def main():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     branches, employees, sales_orders, kitchen_batch_runs, inventory_daily_stock = load_inputs()
     _ = branches
 
