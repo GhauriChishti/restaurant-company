@@ -17,7 +17,6 @@ import datetime
 import collections
 import pathlib
 import os
-import math
 
 
 DEFAULT_FILES = {
@@ -392,40 +391,33 @@ def collect_marketing_cash_out(marketing_rows, marketing_headers):
 def build_cash_in_series(inventory_rows, inventory_headers, date_start, date_end):
     date_col = pick_column(inventory_headers, ["date", "stock_date", "inventory_date"])
     branch_col = pick_column(inventory_headers, ["branch_id", "branch", "store_id", "location_id"])
-    stock_value_col = pick_column(inventory_headers, ["stock_value", "closing_stock_value", "inventory_value", "value"])
+    sales_qty_col = pick_column(inventory_headers, ["sales_consumption_qty", "consumption_qty", "sales_qty"])
 
-    stock_by_branch_day = collections.defaultdict(dict)
+    qty_by_branch_day = collections.defaultdict(lambda: collections.defaultdict(float))
     for row in inventory_rows:
         d = parse_date(row.get(date_col))
         branch_id = (row.get(branch_col) or "").strip()
         if not d or not branch_id:
             continue
-        stock_by_branch_day[branch_id][d] = parse_float(row.get(stock_value_col), default=0.0)
+        sales_qty = max(0.0, parse_float(row.get(sales_qty_col), default=0.0))
+        qty_by_branch_day[branch_id][d] += sales_qty
 
     cash_in_by_day = collections.defaultdict(float)
 
-    for branch_id, day_map in stock_by_branch_day.items():
-        days_sorted = sorted(day_map.keys())
-        prev_val = None
-        for day in days_sorted:
-            stock_val = max(0.0, day_map[day])
-            if prev_val is not None:
-                stock_drop = max(0.0, prev_val - stock_val)
-            else:
-                stock_drop = 0.0
-
-            turnover_proxy = stock_drop * random.uniform(1.25, 1.9)
-            baseline = max(150.0, math.sqrt(stock_val + 1.0) * random.uniform(18.0, 36.0))
+    for branch_id, day_map in qty_by_branch_day.items():
+        for day, sales_qty in day_map.items():
+            sales = sales_qty * random.uniform(180.0, 320.0)
             weekday = day.weekday()
-            weekday_factor = 1.1 if weekday in (4, 5) else (0.93 if weekday == 0 else 1.0)
-
-            sales = max(0.0, (turnover_proxy + baseline) * weekday_factor)
-            cash_in_by_day[day] += sales
-            prev_val = stock_val
+            weekday_factor = 1.09 if weekday in (4, 5) else (0.94 if weekday == 0 else 1.0)
+            cash_in_by_day[day] += max(0.0, sales * weekday_factor)
 
     cursor = date_start
     while cursor <= date_end:
-        cash_in_by_day[cursor] += random.uniform(1200.0, 3200.0)
+        baseline = random.uniform(180.0, 650.0)
+        if cash_in_by_day[cursor] < 1500.0:
+            cash_in_by_day[cursor] += baseline
+        else:
+            cash_in_by_day[cursor] += baseline * 0.25
         cursor += datetime.timedelta(days=1)
 
     return cash_in_by_day
